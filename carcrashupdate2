@@ -1,0 +1,212 @@
+Web VPython 3.2
+
+# Animation Window 
+scene.width = 900
+scene.height = 500
+scene.background = color.gray(0.15)
+scene.camera.pos  = vec(0, 6, 18)
+scene.camera.axis = vec(0, -3, -18)
+
+# Surface data: color, road-line color, friction coefficient
+surface_data = {
+    "Asphalt": {
+        "mu":         0.8,
+        "ground_col": color.gray(0.32),
+        "line_col":   color.white,
+        "line_opacity": 0.55,
+    },
+    "Wet Road": {
+        "mu":         0.4,
+        "ground_col": vec(0.20, 0.26, 0.36),
+        "line_col":   vec(0.55, 0.65, 0.80),
+        "line_opacity": 0.35,
+    },
+    "Ice": {
+        "mu":         0.1,
+        "ground_col": vec(0.70, 0.85, 0.95),
+        "line_col":   color.white,
+        "line_opacity": 0.20,
+    },
+}
+
+# Build ground
+ground = box(
+    pos=vec(0, -0.3, 0), size=vec(60, 0.3, 8),
+    color=surface_data["Asphalt"]["ground_col"],
+    texture=textures.rough
+)
+
+# Dashed centre-line road markers
+road_lines = []
+for xpos in range(-28, 30, 4):
+    road_lines.append(
+        box(pos=vec(xpos, -0.14, 0), size=vec(2, 0.02, 0.3),
+            color=surface_data["Asphalt"]["line_col"],
+            opacity=surface_data["Asphalt"]["line_opacity"])
+    )
+
+# Wet road puddle streaks (hidden by default)
+puddles = []
+for xp in [-20, -14, -6, 2, 10, 18, 24]:
+    puddles.append(
+        box(pos=vec(xp, -0.145, 1.2), size=vec(3.5, 0.01, 1.0),
+            color=vec(0.35, 0.48, 0.65), opacity=0.0)
+    )
+
+# Ice gloss streaks (hidden by default)
+ice_streaks = []
+for xp in range(-25, 28, 6):
+    ice_streaks.append(
+        box(pos=vec(xp, -0.145, 0), size=vec(0.25, 0.01, 7.5),
+            color=color.white, opacity=0.0)
+    )
+
+def apply_surface(name):
+    sd = surface_data[name]
+    ground.color = sd["ground_col"]
+    for ln in road_lines:
+        ln.color   = sd["line_col"]
+        ln.opacity = sd["line_opacity"]
+    for p in puddles:
+        p.opacity = 0.45 if name == "Wet Road" else 0.0
+    for s in ice_streaks:
+        s.opacity = 0.18 if name == "Ice" else 0.0
+
+apply_surface("Asphalt")
+
+# Car and target dictionaries
+car_selection = {
+    "Small":  {"mass": 800,  "scale": 0.85, "color": color.red},
+    "Medium": {"mass": 1400, "scale": 1.0,  "color": color.blue},
+    "Large":  {"mass": 2500, "scale": 1.2,  "color": color.green},
+}
+
+target_selection = {
+    "Stationary Tree": {"mass": 5000, "moving": False, "color": color.green},
+    "Parked Car":      {"mass": 1400, "moving": False, "color": color.cyan},
+    "Deer":            {"mass": 120,  "moving": True,  "color": color.orange},
+    "Truck":           {"mass": 6000, "moving": False, "color": color.red},
+}
+
+# Simulation state
+state = {
+    "surface":     "Asphalt",
+    "car_type":    "Medium",
+    "target_type": "Stationary Tree",
+    "car_speed":   15.0,
+    "elasticity":  0.5,
+    "running":     False,
+    "collided":    False,
+    "dt":          0.005,
+}
+
+g_accel = 9.8
+
+# Car builder
+current_car    = []
+current_target = []
+
+def clear_list(obj_list):
+    for obj in obj_list:
+        obj.visible = False
+    obj_list.clear()
+
+def build_car(car_type, start_x=-12):
+    clear_list(current_car)
+    info  = car_selection[car_type]
+    scale = info["scale"]
+    col   = info["color"]
+
+    body = box(pos=vec(start_x, 0.45*scale, 0),
+               size=vec(3.5*scale, 0.8*scale, 1.8*scale), color=col)
+    cabin = box(pos=vec(start_x - 0.2*scale, 0.45*scale + 0.65*scale, 0),
+                size=vec(1.8*scale, 0.65*scale, 1.6*scale), color=col*0.75)
+
+    r = 0.32 * scale
+    wheel_positions = [vec(start_x + 1.1*scale, r,  0.95*scale),
+                       vec(start_x + 1.1*scale, r, -0.95*scale),
+                       vec(start_x - 1.1*scale, r,  0.95*scale),
+                       vec(start_x - 1.1*scale, r, -0.95*scale)]
+    for wp in wheel_positions:
+        current_car.append(cylinder(pos=wp, axis=vec(0, 0, 0.2), radius=r, color=color.gray(0.2)))
+
+    current_car.append(body)
+    current_car.append(cabin)
+
+# User Interface
+scene.append_to_caption("\n")
+
+scene.append_to_caption("<b>Surface:</b>  ")
+
+def set_surface(b):
+    state["surface"] = b.text
+    apply_surface(b.text)
+
+button(text="Asphalt",  bind=set_surface)
+button(text="Wet Road", bind=set_surface)
+button(text="Ice",      bind=set_surface)
+scene.append_to_caption("\n\n")
+
+scene.append_to_caption("<b>Car Type:</b> ")
+
+def set_size(b):
+    state["car_type"] = b.text
+    build_car(b.text)
+
+button(text="Small",  bind=set_size)
+button(text="Medium", bind=set_size)
+button(text="Large",  bind=set_size)
+scene.append_to_caption("\n\n")
+
+scene.append_to_caption("<b>Target:</b>  ")
+
+def set_target(b):
+    state["target_type"] = b.text
+
+button(text="Tree",       bind=set_target)
+button(text="Parked Car", bind=set_target)
+button(text="Deer",       bind=set_target)
+button(text="Truck",      bind=set_target)
+scene.append_to_caption("\n\n")
+
+status_text = wtext(text="<b>Status:</b> Press Start to run.")
+scene.append_to_caption("  ")
+
+def start_sim(b):
+    state["running"]   = True
+    state["collided"]  = False
+    state["car_speed"] = 15.0
+    build_car(state["car_type"])
+    status_text.text = "<b>Status:</b> Running..."
+
+button(text="Start / Restart", bind=start_sim)
+
+# Initial build
+build_car(state["car_type"])
+
+# Animation loop
+dt = state["dt"]
+
+while True:
+    rate(200)
+
+    if not state["running"]:
+        continue
+
+    if not state["collided"]:
+        mu  = surface_data[state["surface"]]["mu"]
+        acc = -mu * g_accel
+        state["car_speed"] += acc * dt
+        if state["car_speed"] < 0:
+            state["car_speed"] = 0
+            state["running"]   = False
+            status_text.text   = "<b>Status:</b> Car stopped due to friction."
+
+        dx = state["car_speed"] * dt
+        for part in current_car:
+            part.pos.x += dx
+
+        car_x = current_car[-1].pos.x
+        if car_x > 32:
+            state["running"]  = False
+            status_text.text  = "<b>Status:</b> Car left the screen."
