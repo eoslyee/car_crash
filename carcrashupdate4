@@ -361,3 +361,9 @@ while True:
         if state["car_speed"] == 0 and state["target_speed"] == 0:
             state["running"] = False
             status_text.text = "<b>Status:</b> Simulation complete."
+            
+# To-Do 
+# Graphs 
+# Include elasticity slider 
+# Fix the collision mechanics so the tree isn't flying away (maybe it can just break in half)
+
