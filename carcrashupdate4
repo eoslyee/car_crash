@@ -8,6 +8,21 @@ scene.camera.pos  = vec(0, 6, 18)
 scene.camera.axis = vec(0, -3, -18)
 scene.userzoom = False
 
+g_accel  = 9.8
+
+# Simulation state
+state = {
+    "surface": "Asphalt",
+    "car_type": "Medium",
+    "target_type": "Tree",
+    "car_speed": 25.0,
+    "target_speed": 0.0,
+    "running": False,
+    "collided": False,
+    "post_collision": False,
+    "dt": 0.005,
+}
+
 # Surface data
 surface_data = {
     "Asphalt": {
@@ -84,22 +99,6 @@ car_selection = {
     "Large":  {"mass": 2500, "scale": 1.5,  "color": color.green},
 }
 
-TARGET_X = 20
-g_accel  = 9.8
-
-# Simulation state
-state = {
-    "surface": "Asphalt",
-    "car_type": "Medium",
-    "target_type": "Tree",
-    "car_speed": 25.0,
-    "target_speed": 0.0,
-    "running": False,
-    "collided": False,
-    "post_collision": False,
-    "dt": 0.005,
-}
-
 current_car    = []
 current_target = []
 
@@ -135,9 +134,11 @@ def build_car(car_type, start_x=-20):
 target_selection = {
     "Tree": {"mass": 5000},
     "Parked Car": {"mass": 2000},
-    "Moose": {"mass": 550},
+    "Moose": {"mass": 700},
     "Truck": {"mass": 10000},
 }
+
+TARGET_X = 20
 
 # Target builders 
 def build_tree(tx):
@@ -296,9 +297,9 @@ while True:
 
     mu = surface_data[state["surface"]]["mu"]
 
-    # Pre-collision - car decelerates due to friction
+    # Pre-collision
     if not state["collided"]:
-        acc = -mu * g_accel
+        acc = -mu * g_accel / (car_selection[state["car_type"]]["mass"])
         state["car_speed"] += acc * dt
         if state["car_speed"] < 0:
             state["car_speed"] = 0
@@ -344,7 +345,7 @@ while True:
 
         # Target 
         if state["target_speed"] > 0:
-            state["target_speed"] -= mu * g_accel * dt
+            state["target_speed"] -= (mu * g_accel)/(target_selection[state["target_type"]]["mass"]) * dt
             if state["target_speed"] < 0:
                 state["target_speed"] = 0
 
