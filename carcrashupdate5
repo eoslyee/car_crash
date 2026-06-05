@@ -1,0 +1,383 @@
+Web VPython 3.2
+
+# Animation Window
+scene.width = 750
+scene.height = 200
+scene.background = color.gray(0.15)
+scene.camera.pos  = vec(0, 6, 18)
+scene.camera.axis = vec(0, -3, -18)
+scene.userzoom = False
+
+g_accel  = 9.8
+
+# Simulation state
+state = {
+    "surface": "Asphalt",
+    "car_type": "Medium",
+    "target_type": "Tree",
+    "car_speed": 25.0,
+    "target_speed": 0.0,
+    "running": False,
+    "collided": False,
+    "post_collision": False,
+    "elasticity": 1.0,
+    "dt": 0.005,
+}
+
+# Surface data
+surface_data = {
+    "Asphalt": {
+        "mu": 0.8,
+        "initial_speed": 70.0,
+        "ground_col": color.gray(0.32),
+        "line_col": color.white,
+        "line_opacity": 0.55,
+    },
+    "Wet Road": {
+        "mu": 0.4,
+        "initial_speed": 70.0,
+        "ground_col": vec(0.20, 0.26, 0.36),
+        "line_col": vec(0.55, 0.65, 0.80),
+        "line_opacity": 0.35,
+    },
+    "Ice": {
+        "mu": 0.1,
+        "initial_speed": 70.0,
+        "ground_col": vec(0.70, 0.85, 0.95),
+        "line_col": color.white,
+        "line_opacity": 0.20,
+    },
+}
+# Longer ground
+ground = box(
+    pos=vec(0, -0.3, 0), size=vec(120, 0.3, 8),
+    color=surface_data["Asphalt"]["ground_col"],
+    texture=textures.rough
+)
+
+# Road lines
+road_lines = []
+for xpos in range(-58, 62, 4):
+    road_lines.append(
+        box(pos=vec(xpos, -0.14, 0), size=vec(2, 0.02, 0.3),
+            color=surface_data["Asphalt"]["line_col"],
+            opacity=surface_data["Asphalt"]["line_opacity"])
+    )
+
+# Wet puddles
+puddles = []
+for xp in [-40, -28, -14, -6, 2, 10, 22, 34, 44]:
+    puddles.append(
+        box(pos=vec(xp, -0.145, 1.2), size=vec(3.5, 0.01, 1.0),
+            color=vec(0.35, 0.48, 0.65), opacity=0.0)
+    )
+
+# Ice streaks
+ice_streaks = []
+for xp in range(-55, 58, 6):
+    ice_streaks.append(
+        box(pos=vec(xp, -0.145, 0), size=vec(0.25, 0.01, 7.5),
+            color=color.white, opacity=0.0)
+    )
+
+def apply_surface(name):
+    sd = surface_data[name]
+    ground.color = sd["ground_col"]
+    for ln in road_lines:
+        ln.color = sd["line_col"]
+        ln.opacity = sd["line_opacity"]
+    for p in puddles:
+        p.opacity = 0.45 if name == "Wet Road" else 0.0
+    for s in ice_streaks:
+        s.opacity = 0.18 if name == "Ice" else 0.0
+
+apply_surface("Asphalt")
+
+# Car data
+car_selection = {
+    "Small":  {"mass": 800,  "scale": 0.75, "color": color.red},
+    "Medium": {"mass": 1400, "scale": 1.0,  "color": color.blue},
+    "Large":  {"mass": 2500, "scale": 1.5,  "color": color.green},
+}
+
+current_car    = []
+current_target = []
+
+def clear_list(obj_list):
+    for obj in obj_list:
+        obj.visible = False
+    obj_list.clear()
+
+# Car builder 
+def build_car(car_type, start_x=-20):
+    clear_list(current_car)
+    info  = car_selection[car_type]
+    scale = info["scale"]
+    col   = info["color"]
+
+    body = box(pos=vec(start_x, 0.45*scale, 0),
+               size=vec(3.5*scale, 0.8*scale, 1.8*scale), color=col)
+    cabin = box(pos=vec(start_x - 0.2*scale, 0.45*scale + 0.65*scale, 0),
+                size=vec(1.8*scale, 0.65*scale, 1.6*scale), color=col*0.75)
+
+    r = 0.32 * scale
+    wheel_positions = [vec(start_x + 1.1*scale, r,  0.95*scale),
+                       vec(start_x + 1.1*scale, r, -0.95*scale),
+                       vec(start_x - 1.1*scale, r,  0.95*scale),
+                       vec(start_x - 1.1*scale, r, -0.95*scale)]
+    for wp in wheel_positions:
+        current_car.append(cylinder(pos=wp, axis=vec(0, 0, 0.2), radius=r, color=color.gray(0.2)))
+
+    current_car.append(body)
+    current_car.append(cabin)
+    
+# Target data
+target_selection = {
+    "Tree": {"mass": 5000},
+    "Parked Car": {"mass": 2000},
+    "Moose": {"mass": 700},
+    "Truck": {"mass": 10000},
+}
+
+TARGET_X = 20
+
+# Target builders 
+def build_tree(tx):
+    trunk = cylinder(pos=vec(tx, 0, 0), axis=vec(0, 2.5, 0),
+                     radius=0.25, color=vec(0.4, 0.25, 0.1))
+    leaves1 = cone(pos=vec(tx, 2.0, 0), axis=vec(0, 2.5, 0),
+                   radius=1.4, color=color.green)
+    leaves2 = cone(pos=vec(tx, 3.2, 0), axis=vec(0, 2.0, 0),
+                   radius=1.0, color=vec(0.1, 0.6, 0.1))
+    leaves3 = cone(pos=vec(tx, 4.2, 0), axis=vec(0, 1.5, 0),
+                   radius=0.65, color=vec(0.05, 0.5, 0.05))
+    current_target.append(trunk)
+    current_target.append(leaves1)
+    current_target.append(leaves2)
+    current_target.append(leaves3)
+
+def build_parked_car(tx):
+    body = box(pos=vec(tx, 0.45, 0),
+               size=vec(3.5, 0.8, 1.8), color=color.cyan)
+    cabin = box(pos=vec(tx - 0.2, 0.45 + 0.65, 0),
+                size=vec(1.8, 0.65, 1.6), color=color.cyan*0.75)
+    r = 0.32
+    wheel_positions2 = [vec(tx + 1.1, r, 0.95),
+                        vec(tx + 1.1, r, -0.95),
+                        vec(tx - 1.1, r, 0.95),
+                        vec(tx - 1.1, r, -0.95)]
+    for wp in wheel_positions2:
+        current_target.append(cylinder(pos=wp, axis=vec(0, 0, 0.2), radius=r, color=color.gray(0.2)))
+    current_target.append(body)
+    current_target.append(cabin)
+
+def build_moose(tx):
+    body = ellipsoid(pos=vec(tx, 0.85, 0), size=vec(3.6, 1.4, 1.3), color=vec(0.6, 0.4, 0.2))
+    
+    head = ellipsoid(pos=vec(tx + 1.1, 1.35, 0), size=vec(1.1, 0.9, 0.8), color=vec(0.6, 0.4, 0.2))
+    
+    neck = cylinder(pos=vec(tx + 0.75, 0.95, 0), axis=vec(0.35, 0.45, 0),
+                    radius=0.8, color=vec(0.6, 0.4, 0.2))
+    leg_positions = [vec(tx + 0.5, 0.5, 0.2),
+                     vec(tx + 0.5, 0.5, -0.2),
+                     vec(tx - 0.5, 0.5, 0.2),
+                     vec(tx - 0.5, 0.5, -0.2)]
+    for lp in leg_positions:
+        current_target.append(cylinder(pos=lp, axis=vec(0, -0.5, 0), radius=0.07, color=vec(0.5, 0.33, 0.15)))
+    
+    current_target.append(cylinder(pos=vec(tx + 1.05, 1.55, 0.1), axis=vec(0.1, 0.4, 0.15), radius=0.04, color=vec(0.35, 0.22, 0.08)))
+    current_target.append(cylinder(pos=vec(tx + 1.05, 1.55, -0.1), axis=vec(0.1, 0.4, -0.15), radius=0.04, color=vec(0.35, 0.22, 0.08)))
+    current_target.append(body)
+    current_target.append(head)
+    current_target.append(neck)
+
+def build_truck(tx):
+    cab = box(pos=vec(tx + 2.5, 1.1, 0), size=vec(2.5, 2.2, 2.2), color=color.red)
+    cab_window = box(pos=vec(tx + 3.6, 1.6, 0), size=vec(0.1, 1.0, 1.8), color=vec(0.6, 0.8, 1.0))
+    trailer = box(pos=vec(tx - 1.5, 1.25, 0), size=vec(6.0, 2.5, 2.2), color=color.gray(0.55))
+    trailer_stripe = box(pos=vec(tx - 1.5, 2.45, 0), size=vec(6.0, 0.12, 2.22), color=color.red)
+    r2 = 0.5
+    truck_wheel_pos = [vec(tx + 2.2, r2, 1.15),
+                       vec(tx + 2.2, r2, -1.15),
+                       vec(tx - 0.5, r2, 1.15),
+                       vec(tx - 0.5, r2, -1.15),
+                       vec(tx - 2.5, r2, 1.15),
+                       vec(tx - 2.5, r2, -1.15)]
+                       
+    for wp in truck_wheel_pos:
+        current_target.append(cylinder(pos=wp, axis=vec(0, 0, 0.25), radius=r2, color=color.gray(0.15)))
+    current_target.append(cab)
+    current_target.append(cab_window)
+    current_target.append(trailer)
+    current_target.append(trailer_stripe)
+
+def build_target(target_type):
+    clear_list(current_target)
+    tx = TARGET_X
+    if target_type == "Tree":
+        build_tree(tx)
+    elif target_type == "Parked Car":
+        build_parked_car(tx)
+    elif target_type == "Moose":
+        build_moose(tx)
+    elif target_type == "Truck":
+        build_truck(tx)
+
+# Perfectly elastic: kinetic energy and momentum both conserved
+def compute_elastic_velocities(v1, v2, m1, m2, e):
+    # v1_f = ((m1 - m2) / (m1 + m2)) * v1
+    # v2_f = (2.0 * m1  / (m1 + m2)) * v1
+    v1_f = (m1*v1 + m2*v2 - m2*e*(v1 - v2)) / (m1 + m2)
+    v2_f = (m1*v1 + m2*v2 + m1*e*(v1 - v2)) / (m1 + m2)
+    return v1_f, v2_f
+
+# User Interface
+scene.append_to_caption("\n")
+
+scene.append_to_caption("<b>Surface:</b>  ")
+
+def set_surface(b):
+    state["surface"] = b.text
+    apply_surface(b.text)
+
+button(text="Asphalt", bind=set_surface)
+button(text="Wet Road", bind=set_surface)
+button(text="Ice", bind=set_surface)
+scene.append_to_caption("\n\n")
+
+scene.append_to_caption("<b>Car Type:</b> ")
+
+def set_size(b):
+    state["car_type"] = b.text
+    build_car(b.text)
+
+button(text="Small", bind=set_size)
+button(text="Medium",bind=set_size)
+button(text="Large", bind=set_size)
+scene.append_to_caption("\n\n")
+
+scene.append_to_caption("<b>Target:</b>  ")
+
+def set_target(b):
+    state["target_type"] = b.text
+    build_target(b.text)
+
+button(text="Tree", bind=set_target)
+button(text="Parked Car", bind=set_target)
+button(text="Moose", bind=set_target)
+button(text="Truck", bind=set_target)
+scene.append_to_caption("\n\n")
+
+status_text = wtext(text="<b>Status:</b> Press Start to run.")
+scene.append_to_caption("  ")
+
+
+# Slider 
+def change_e(sl):
+    state["elasticity"] = sl.value
+
+e_slider = slider(min=0.0, max=1.0, value=1.0, step=0.01, bind=change_e)
+scene.append_to_caption("\n\n")
+
+def start_sim(b):
+    sd = surface_data[state["surface"]]
+    state["running"] = True
+    state["collided"] = False
+    state["post_collision"] = False
+    state["car_speed"] = sd["initial_speed"]
+    state["target_speed"] = 0.0
+    build_car(state["car_type"])
+    build_target(state["target_type"])
+    status_text.text = "<b>Status:</b> Running..."
+
+button(text="Start / Restart", bind=start_sim)
+
+scene.append_to_caption("\n<b>Elasticity (e):</b>  ")
+elasticity_text = wtext(text="1.00  (perfectly elastic)")
+
+# Initial scene
+build_car(state["car_type"])
+build_target(state["target_type"])
+
+# Animation loop 
+dt = state["dt"]
+
+while True:
+    rate(200)
+
+    if not state["running"]:
+        continue
+
+    mu = surface_data[state["surface"]]["mu"]
+
+    # Pre-collision
+    if not state["collided"]:
+        acc = -mu * g_accel # / (car_selection[state["car_type"]]["mass"])
+        state["car_speed"] += acc * dt
+        if state["car_speed"] < 0:
+            state["car_speed"] = 0
+            state["running"]   = False
+            status_text.text   = "<b>Status:</b> Car stopped before collision."
+
+        dx = state["car_speed"] * dt
+        for part in current_car:
+            part.pos.x += dx
+
+        car_body_x = current_car[-2].pos.x
+        if car_body_x >= TARGET_X - 2.0:
+            # Collision moment — compute elastic post-collision velocities
+            state["collided"] = True
+            m1 = car_selection[state["car_type"]]["mass"]
+            m2 = target_selection[state["target_type"]]["mass"]
+            v1 = state["car_speed"]
+            v2 = 0.0
+            v1_f, v2_f = compute_elastic_velocities(v1, v2, m1, m2, state["elasticity"])
+            state["car_speed"]    = v1_f
+            state["target_speed"] = v2_f
+
+            t_name = state["target_type"]
+            if t_name == "Moose":
+                status_text.text = "<b>Status:</b> Collision! Moose launched forward, car barely slowed."
+            elif t_name == "Tree":
+                status_text.text = "<b>Status:</b> Collision! Car bounced back and the tree barely moved."
+            elif t_name == "Truck":
+                status_text.text = "<b>Status:</b> Collision! Car bounced back hard and the truck barely moved."
+            elif t_name == "Parked Car":
+                status_text.text = "<b>Status:</b> Collision! Both cars exchange speed."
+
+    # Post-collision: both objects move and decelerate from friction
+    else:
+        #car 
+        if state["car_speed"] > 0:
+            state["car_speed"] -= mu * g_accel * dt
+            if state["car_speed"] < 0:
+                state["car_speed"] = 0
+        elif state["car_speed"] < 0:
+            state["car_speed"] += mu * g_accel * dt
+            if state["car_speed"] > 0:
+                state["car_speed"] = 0
+
+        # Target 
+        if state["target_speed"] > 0:
+            state["target_speed"] -= (mu * g_accel) # /(target_selection[state["target_type"]]["mass"]) * dt
+            if state["target_speed"] < 0:
+                state["target_speed"] = 0
+
+        dx_car    = state["car_speed"]    * dt
+        dx_target = state["target_speed"] * dt
+
+        for part in current_car:
+            part.pos.x += dx_car
+        for part in current_target:
+            part.pos.x += dx_target
+
+        # Stop simulation when everythings done
+        if state["car_speed"] == 0 and state["target_speed"] == 0:
+            state["running"] = False
+            status_text.text = "<b>Status:</b> Simulation complete."
+            
+# To-Do 
+# Graphs 
+# Include elasticity slider 
+# Fix the collision mechanics so the tree isn't flying away (maybe it can just break in half)
+
