@@ -381,3 +381,8 @@ while True:
 # Include elasticity slider 
 # Fix the collision mechanics so the tree isn't flying away (maybe it can just break in half)
 
+# Print consolde = NO 
+# Instructions = YES 
+# All sliders/graphs must be labeled 
+# Reset Button 
+
